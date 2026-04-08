@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Memoria Cultural | Tarjetas Fijas</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body {
+            background: linear-gradient(145deg, #1a3c2c 0%, #0e2a1f 100%);
+            font-family: system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex; justify-content: center; align-items: center; margin: 0; padding: 20px;
+        }
+        .game-container {
+            background: rgba(255, 248, 225, 0.96);
+            border-radius: 2rem;
+            box-shadow: 0 25px 40px rgba(0, 0, 0, 0.4);
+            padding: 1.5rem;
+            max-width: 600px; width: 100%;
+        }
+        .stats { background: #2d2418; padding: 0.8rem 1.5rem; border-radius: 50px; color: #ffdf8c; display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 1.5rem; }
+        .cards-grid { display: grid; gap: 12px; perspective: 1000px; }
+
+        .card {
+            aspect-ratio: 1 / 1; position: relative; cursor: pointer;
+            transform-style: preserve-3d; transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ESTA ES LA CLAVE: Fuerzas a que flipped y matched mantengan el giro de 180 grados */
+        .card.flipped, .card.matched {
+            transform: rotateY(180deg) !important;
+        }
+
+        .card.matched {
+            cursor: default; pointer-events: none;
+        }
+
+        .card-front, .card-back {
+            position: absolute; width: 100%; height: 100%; backface-visibility: hidden;
+            border-radius: 12px; display: flex; align-items: center; justify-content: center;
+        }
+        .card-back { background: #b97f44; border: 3px solid #f3cf8a; font-size: 2.5rem; }
+        .card-front { background: white; transform: rotateY(180deg); padding: 5px; border: 2px solid #ddd; }
+        .card-front img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+        .card.matched .card-front { border: 4px solid #ffd700; box-shadow: 0 0 15px gold; }
+
+        .btn { background: #c97e3f; border: none; color: white; padding: 0.5rem 1rem; border-radius: 20px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <div class="stats">
+        <span>🎯 Parejas: <span id="matches">0</span></span>
+        <span>🔁 Intentos: <span id="attempts">0</span></span>
+        <button class="btn" onclick="location.reload()">🔄 Reiniciar</button>
+    </div>
+    <div class="cards-grid" id="grid"></div>
+</div>
+
+<script>
+    const CULTURAL_SET = [
+        { id: 1, name: "Mona Lisa", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/400px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg" },
+        { id: 2, name: "Noche Estrellada", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/500px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg" },
+        { id: 3, name: "Albert Einstein", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Einstein_1921_by_F_Schmutzer_-_restoration.jpg/400px-Einstein_1921_by_F_Schmutzer_-_restoration.jpg" },
+        { id: 4, name: "Torre Eiffel", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Tour_Eiffel_Wikimedia_Commons_%28cropped%29.jpg/400px-Tour_Eiffel_Wikimedia_Commons_%28cropped%29.jpg" },
+        { id: 5, name: "Machu Picchu", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Machu_Picchu%2C_Peru.jpg/500px-Machu_Picchu%2C_Peru.jpg" },
+        { id: 6, name: "Coliseo Romano", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Colosseo_2020.jpg/500px-Colosseo_2020.jpg" },
+        { id: 7, name: "Taj Mahal", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Taj_Mahal_in_March_2004.jpg/500px-Taj_Mahal_in_March_2004.jpg" },
+        { id: 8, name: "Marie Curie", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Marie_Curie_c._1920s.jpg/400px-Marie_Curie_c._1920s.jpg" }
+    ];
+
+    let flippedCards = [];
+    let lockBoard = false;
+    let matchesCount = 0;
+    let attemptsCount = 0;
+
+    function init() {
+        const grid = document.getElementById('grid');
+        const deck = [...CULTURAL_SET, ...CULTURAL_SET].sort(() => 0.5 - Math.random());
+        grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
+
+        deck.forEach(data => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.dataset.id = data.id;
+            card.innerHTML = `
+                <div class="card-back">🎨</div>
+                <div class="card-front"><img src="${data.url}" onerror="this.src='https://via.placeholder.com/400x400/c97e3f/ffffff?text=${encodeURIComponent(data.name)}'"></div>
+            `;
+
+            card.onclick = () => {
+                // Si la carta ya está emparejada, girada, o el tablero bloqueado, no hacer nada
+                if (lockBoard || card.classList.contains('flipped') || card.classList.contains('matched')) return;
+
+                card.classList.add('flipped');
+                flippedCards.push(card);
+
+                if (flippedCards.length === 2) {
+                    checkMatch();
+                }
+            };
+            grid.appendChild(card);
+        });
+    }
+
+    function checkMatch() {
+        lockBoard = true;
+        attemptsCount++;
+        document.getElementById('attempts').innerText = attemptsCount;
+
+        const [c1, c2] = flippedCards;
+
+        if (c1.dataset.id === c2.dataset.id) {
+            // Es pareja: añadimos la clase matched que asegura que no se vuelvan a voltear
+            c1.classList.add('matched');
+            c2.classList.add('matched');
+            matchesCount++;
+            document.getElementById('matches').innerText = matchesCount;
+            flippedCards = [];
+            lockBoard = false;
+
+            if (matchesCount === CULTURAL_SET.length) {
+                setTimeout(() => alert("¡Felicidades Nicole! Lograste todas las parejas."), 500);
+            }
+        } else {
+            // No es pareja: quitamos la clase flipped para que se volteen de nuevo
+            setTimeout(() => {
+                c1.classList.remove('flipped');
+                c2.classList.remove('flipped');
+                flippedCards = [];
+                lockBoard = false;
+            }, 1000);
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>
